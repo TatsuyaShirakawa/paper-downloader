@@ -14,7 +14,8 @@ def url_encode(url):
 
 @click.command()
 @click.argument('result_dir')
-def main(result_dir):
+@click.option('--no_html', is_flag=True)
+def main(result_dir, no_html):
 
     html = urllib.request.urlopen(papers_url)
     soup = BeautifulSoup(html, "html.parser")
@@ -25,57 +26,95 @@ def main(result_dir):
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
-    for paper in papers:
+    papers_detail = []
+
+    for paper_count, paper in enumerate(papers):
 
         title = paper.find('p', attrs={'class': 'title'}).text
         links = paper.find('p', attrs={'class': 'links'})
 
-        print( title, '...' )
-
-        paper_dir = os.path.join(result_dir, title.replace(' ', '_').lower())
+        print( '[{:3}/{:3}]'.format(paper_count+1, len(papers)), title, '...' )
+        paper_dirname = title.replace(' ', '_').lower()
+        paper_dir = os.path.join(result_dir, paper_dirname)
         if not os.path.exists(paper_dir):
             os.makedirs(paper_dir)
 
+        detail = {}
+        detail['title'] = title
+        detail['links'] = {}
         for a in links.find_all('a'):
             if a.text == 'abs':
                 # abs
-                pass
+                url = a['href']
+                abs_html = urllib.request.urlopen(url)
+                abs_soup = BeautifulSoup(abs_html, 'html.parser')
+                # abstract
+                detail['abstract'] = abs_soup.find('div', attrs={'class': 'abstract'}).text.strip()
+                authors =  abs_soup.find('div', attrs={'class': 'authors'}).text.strip().strip(';')
+                authors = [author.strip() for author in authors.split(',')]
+                detail['authors'] = ', '.join(authors)
             elif a.text == 'Download PDF':
                 # paper pdf link
                 url = a['href']
-                print(url)
                 url = url_encode(url)
-                save_path = os.path.join(paper_dir, url.split('/')[-1])
-                if os.path.exists(save_path):
-                    continue
-                response = urllib.request.urlopen(url)
-                with open(save_path, 'wb') as fout:
-                    fout.write(response.read())
+                filename = url.split('/')[-1]
+                save_path = os.path.join(paper_dir, filename)
+                if not os.path.exists(save_path):
+                    response = urllib.request.urlopen(url)
+                    with open(save_path, 'wb') as fout:
+                        fout.write(response.read())
+                detail['links']['pdf'] = os.path.join(paper_dirname, filename)
             elif a.text == 'Supplementary PDF':
                 # paper supplementary pdf link
                 url = a['href']
-                print(url)
                 url = url_encode(url)
-                save_path = os.path.join(paper_dir, url.split('/')[-1])
-                if os.path.exists(save_path):
-                    continue
-                response = urllib.request.urlopen(url)
-                with open(save_path, 'wb') as fout:
-                    fout.write(response.read())
+                filename = url.split('/')[-1]
+                save_path = os.path.join(paper_dir, filename)
+                if not os.path.exists(save_path):
+                    response = urllib.request.urlopen(url)
+                    with open(save_path, 'wb') as fout:
+                        fout.write(response.read())
+                detail['links']['supplementary_pdf'] = os.path.join(paper_dirname, filename)
             elif a.text == 'Supplementary ZIP':
                 # paper supplementary ZIP link
                 url = a['href']
-                print(url)
                 url = url_encode(url)
-                save_path = os.path.join(paper_dir, url.split('/')[-1])
-                if os.path.exists(save_path):
-                    continue
-                response = urllib.request.urlopen(url)
-                with open(save_path, 'wb') as fout:
-                    fout.write(response.read())
+                filename = url.split('/')[-1]
+                save_path = os.path.join(paper_dir, filename)
+                if not os.path.exists(save_path):
+                    response = urllib.request.urlopen(url)
+                    with open(save_path, 'wb') as fout:
+                        fout.write(response.read())
+                detail['links']['supplementary_zip'] = os.path.join(paper_dirname, filename)
             else:
                 print( 'unknown link', a.text )
+        papers_detail.append(detail)
 
+    if not no_html:
+        with open(os.path.join(result_dir, 'index.html'), 'w') as fout:
+            fout.write('''<!DOCTYPE html>
+            <html><head><meta charset="utf-8"><title>{title}</title></head>
+            <body>
+            '''.format(title='ICML2017'))
+            for detail in papers_detail:
+                fout.write('<h2>{title}</h2>\n'.format(title=detail['title']))
+                fout.write('{authors}\n'.format(authors=detail['authors']))
+                fout.write('<br/>')
+                fout.write('<h3>Abstract</h3>')
+                fout.write('{abstract}'.format(abstract=detail['abstract']))
+                fout.write('<br/>')
+                fout.write('<h3>Materials</h3>')
+                links = detail['links']
+                fout.write('<ul>')
+                if 'pdf' in links:
+                    fout.write('<li><a href={href}>pdf</a></li>'.format(href=links['pdf']))
+                if 'supplementary_pdf' in links:
+                    fout.write('<li><a href={href}>supplementary pdf</a></li>'.format(href=links['supplementary_pdf']))
+                if 'supplementary_zip' in links:
+                    fout.write('<li><a href={href}>supplementary zip</a></li>'.format(href=links['supplementary_zip']))
+                fout.write('</ul>')
+                fout.write('<br/>')
+            fout.write('</body></html>')
 
 if __name__ == '__main__':
 
