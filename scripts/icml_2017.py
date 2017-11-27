@@ -3,9 +3,9 @@ import os
 import sys
 import re
 import urllib
+import json
 from bs4 import BeautifulSoup
 import click
-import arxiv
 
 papers_url = 'http://proceedings.mlr.press/v70/'
 
@@ -17,7 +17,8 @@ def url_encode(url):
 @click.command()
 @click.argument('result_dir')
 @click.option('--no_html', is_flag=True)
-def main(result_dir, no_html):
+@click.option('--no_json', is_flag=True)
+def main(result_dir, no_html, no_json):
 
     html = urllib.request.urlopen(papers_url)
     soup = BeautifulSoup(html, "html.parser")
@@ -110,6 +111,8 @@ def main(result_dir, no_html):
                 print( 'unknown link', a.text )
         papers_detail.append(detail)
 
+    if not no_json:
+        json.dump(papers_detail, open(os.path.join(result_dir, 'detail.json'), 'w'))
 
     if not no_html:
         with open(os.path.join(result_dir, 'index.html'), 'w') as fout:
